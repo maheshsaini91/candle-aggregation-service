@@ -9,9 +9,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @ConditionalOnProperty(name = "candle.generator.enabled", havingValue = "true", matchIfMissing = true)
@@ -21,22 +24,31 @@ public class BidAskEventGenerator {
     private final IngestionService ingestionService;
     private final List<String> symbols;
     private final Random random = new Random();
-
-    private static final java.util.Map<String, Double> BASE_PRICES = java.util.Map.of(
-            "BTC-USD", 65000.0,
-            "ETH-USD", 3500.0,
-            "SOL-USD", 150.0
-    );
+    private final Map<String, Double> basePrices;
+    @Value("${candle.symbols}")
+    String symbolsConfig;
 
     // Track last price per symbol for random walk continuity
     private final ConcurrentHashMap<String, Double> lastPrices = new ConcurrentHashMap<>();
 
     public BidAskEventGenerator(
             IngestionService ingestionService,
-            @Value("${candle.symbols:BTC-USD,ETH-USD,SOL-USD}") String symbolsConfig
+            @Value("${candle.symbols:BTC-USD,ETH-USD,SOL-USD}") String symbolsConfig,
+            @Value("${candle.base-prices}") String basePricesConfig
     ) {
         this.ingestionService = ingestionService;
-        this.symbols          = List.of(symbolsConfig.split(","));
+        this.symbols = Arrays.stream(symbolsConfig.split(","))
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        this.basePrices = Arrays.stream(basePricesConfig.split(","))
+                .map(String::trim)
+                .filter(s -> s.contains(":"))
+                .collect(Collectors.toUnmodifiableMap(
+                        entry -> entry.split(":")[0].trim(),
+                        entry -> Double.parseDouble(entry.split(":")[1].trim())
+                ));
+
         log.info("Event generator initialised for symbols: {}", this.symbols);
     }
 
@@ -50,7 +62,7 @@ public class BidAskEventGenerator {
     }
 
     private BidAskEvent generateEvent(String symbol, long timestamp) {
-        double base    = BASE_PRICES.getOrDefault(symbol, 100.0);
+        double base    = basePrices.getOrDefault(symbol, 100.0);
         double lastMid = lastPrices.getOrDefault(symbol, base);
 
         // Random walk: ±0.05% per tick
