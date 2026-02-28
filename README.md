@@ -1,0 +1,1 @@
+# candle-aggregation-service
