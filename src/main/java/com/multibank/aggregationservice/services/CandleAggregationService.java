@@ -71,12 +71,10 @@ public class CandleAggregationService {
                             "Unsupported interval: " + intervalLabel +
                                     ". Supported: " + supportedIntervalLabels()));
 
-            List<Candle> candles = repository.findFinalized(
-                    symbol, interval.getSeconds(), from, to);
+            List<Candle> candles = repository.findFinalized( symbol, interval.getSeconds(), from, to);
 
             if (candles.isEmpty()) {
-                log.debug("No data: symbol={} interval={} from={} to={}",
-                        symbol, intervalLabel, from, to);
+                log.debug("No data: symbol={} interval={} from={} to={}", symbol, intervalLabel, from, to);
                 return HistoryResponse.noData();
             }
 

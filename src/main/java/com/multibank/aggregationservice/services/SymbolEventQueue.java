@@ -65,7 +65,7 @@ public class SymbolEventQueue implements Runnable {
     @Override
     public void run() {
         log.info("Aggregation consumer started for symbol={}", symbol);
-        while (running.get() || !queue.isEmpty()) {
+        while (running.get() || ! queue.isEmpty()) {
             try {
                 BidAskEvent event = queue.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS);
                 if (event != null) {
