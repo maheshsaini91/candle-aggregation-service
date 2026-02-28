@@ -47,6 +47,49 @@
 			<artifactId>micrometer-registry-prometheus</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Actuator — provides the MeterRegistry infrastructure -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Micrometer Prometheus — registers a concrete MeterRegistry bean -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
+		<!-- Logback JSON layout for structured logging -->
+		<dependency>
+			<groupId>ch.qos.logback.contrib</groupId>
+			<artifactId>logback-json-classic</artifactId>
+			<version>0.1.5</version>
+		</dependency>
+
+		<!-- Required by logback-json-classic -->
+		<dependency>
+			<groupId>ch.qos.logback.contrib</groupId>
+			<artifactId>logback-jackson</artifactId>
+			<version>0.1.5</version>
+		</dependency>
+
+		<dependency>
+			<groupId>net.logstash.logback</groupId>
+			<artifactId>logstash-logback-encoder</artifactId>
+			<version>7.4</version>
+		</dependency>
+
+		<!-- Jackson databind — needed by logback-jackson -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+
 	</dependencies>
 
 	<build>
