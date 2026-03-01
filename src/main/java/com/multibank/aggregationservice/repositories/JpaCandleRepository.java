@@ -1,5 +1,7 @@
 package com.multibank.aggregationservice.repositories;
 
+import com.multibank.aggregationservice.entities.CandleEntity;
+import com.multibank.aggregationservice.entities.CandleId;
 import com.multibank.aggregationservice.models.Candle;
 import com.multibank.aggregationservice.models.CandleKey;
 import com.multibank.aggregationservice.models.MutableCandle;
@@ -9,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,16 +19,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Repository
-@Profile("!db")
-public class InMemoryCandleRepository implements CandleRepository {
+@Profile("db")
+public class JpaCandleRepository implements CandleRepository {
 
-    private static final Logger log = LoggerFactory.getLogger(InMemoryCandleRepository.class);
+    private static final Logger log = LoggerFactory.getLogger(JpaCandleRepository.class);
 
-    private final ConcurrentMap<CandleKey, MutableCandle> activeCandles = new ConcurrentHashMap<>();
-    private final ConcurrentMap<CandleKey, Candle> finalizedCandles = new ConcurrentHashMap<>();
+    private final CandleJpaRepository candleJpaRepository;
     private final Counter candlesFinalized;
 
-    public InMemoryCandleRepository(MeterRegistry meterRegistry) {
+    private final ConcurrentMap<CandleKey, MutableCandle> activeCandles = new ConcurrentHashMap<>();
+
+    public JpaCandleRepository(CandleJpaRepository candleJpaRepository, MeterRegistry meterRegistry) {
+        this.candleJpaRepository = candleJpaRepository;
         this.candlesFinalized = Counter.builder("candle.finalized.total")
                 .description("Total candle windows finalized since startup")
                 .register(meterRegistry);
@@ -45,35 +50,40 @@ public class InMemoryCandleRepository implements CandleRepository {
     }
 
     @Override
+    @Transactional
     public void finalizeCandle(CandleKey key) {
-        MutableCandle active = activeCandles.remove(key);
-        if (active != null) {
-            Candle finalized = active.toCandle();
-            finalizedCandles.put(key, finalized);
-            candlesFinalized.increment();
-            log.info("Candle finalized: symbol={} interval={}s t={} O={} H={} L={} C={} V={}",
-                    key.symbol(), key.intervalSec(), finalized.time(),
-                    String.format("%.4f", finalized.open()),
-                    String.format("%.4f", finalized.high()),
-                    String.format("%.4f", finalized.low()),
-                    String.format("%.4f", finalized.close()),
-                    finalized.volume());
+        MutableCandle active = activeCandles.get(key);
+        if (active == null) {
+            return;
         }
+        Candle snapshot = active.toCandle();
+
+        CandleId id = new CandleId(key.symbol(), key.intervalSec(), key.bucketStart());
+        CandleEntity entity = candleJpaRepository.findById(id).orElse(new CandleEntity());
+        entity.setId(id);
+        entity.setOpen(snapshot.open());
+        entity.setHigh(snapshot.high());
+        entity.setLow(snapshot.low());
+        entity.setClose(snapshot.close());
+        entity.setVolume(snapshot.volume());
+        candleJpaRepository.save(entity);
+        candlesFinalized.increment();
+
+        activeCandles.remove(key);
+
+        log.info("Candle finalized: symbol={} interval={}s t={} O={} H={} L={} C={} V={}",
+                key.symbol(), key.intervalSec(), snapshot.time(),
+                String.format("%.4f", snapshot.open()),
+                String.format("%.4f", snapshot.high()),
+                String.format("%.4f", snapshot.low()),
+                String.format("%.4f", snapshot.close()),
+                snapshot.volume());
     }
 
     @Override
     public List<Candle> findFinalized(String symbol, long intervalSec, long from, long to) {
-        List<Candle> result = new ArrayList<>();
         long alignedFrom = (from / intervalSec) * intervalSec;
-
-        for (long bucket = alignedFrom; bucket <= to; bucket += intervalSec) {
-            CandleKey key = new CandleKey(symbol, intervalSec, bucket);
-            Candle candle = finalizedCandles.get(key);
-            if (candle != null) {
-                result.add(candle);
-            }
-        }
-        return result;
+        return candleJpaRepository.findFinalizedRange(symbol, intervalSec, alignedFrom, to);
     }
 
     @Override
@@ -95,6 +105,6 @@ public class InMemoryCandleRepository implements CandleRepository {
 
     @Override
     public int finalizedCandleCount() {
-        return finalizedCandles.size();
+        return (int) candleJpaRepository.count();
     }
 }

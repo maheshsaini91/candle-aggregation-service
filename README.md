@@ -4,36 +4,105 @@ A backend Java service that consumes a stream of bid/ask market data, aggregates
 
 ## Project Overview
 
-- **Stream ingestion**: Accepts `BidAskEvent(symbol, bid, ask, timestamp)` from a simulated generator (scheduled), or can be wired to Kafka/WebSocket.
-- **Candlestick aggregation**: Builds OHLC candles per **(symbol, interval)** with wall-clock-aligned buckets. Intervals: `1s`, `5s`, `1m`, `15m`, `1h`. Volume is tick count (number of events per window).
-- **Storage**: In-memory `ConcurrentMap`-based repository (active + finalized candles). The **Repository pattern** is used: `CandleRepository` is an interface implemented by `InMemoryCandleRepository`, so persistence can be swapped for PostgreSQL/TimescaleDB without changing aggregation or API code.
-- **History API**: `GET /history?symbol=BTC-USD&interval=1m&from=1620000000&to=1620000600` returns TradingView-style arrays: `s`, `t`, `o`, `h`, `l`, `c`, `v` (timestamps in UNIX seconds).
+- **Stream ingestion**: Accepts `BidAskEvent(symbol, bid, ask, timestamp)` from a scheduled generator, or can be wired to Kafka/WebSocket.
+- **Candlestick aggregation**: OHLC candles per **(symbol, interval)** with wall-clock-aligned buckets. Intervals: `1s`, `5s`, `1m`, `15m`, `1h`. Volume is tick count per window.
+- **Storage**: **PostgreSQL** by default (profile `db`). Run with Docker: `./run.sh` or `docker compose up --build` — no Java/Maven on host. `CandleRepository` is an interface (JPA implementation for DB; in-memory when not using `db`).
+- **History API**: `GET /v1/history?symbol=BTC-USD&interval=1m&from=1620000000&to=1620000600` returns TradingView-style `s`, `t`, `o`, `h`, `l`, `c`, `v` (UNIX timestamps).
 - **Non-functional**: Thread-safe aggregation, per-symbol queues with backpressure, graceful shutdown with candle flush, health and Prometheus metrics, late-event grace period.
 
 ## Assumptions and Trade-offs
 
 - **Mid-price for OHLC**: OHLC values are derived from mid price `(bid + ask) / 2`; bid/ask are not stored separately per tick.
 - **Volume**: Volume is the number of ticks (events) in the window; not quote or notional volume.
-- **Late events**: Events older than a configurable grace period (default 5s) are dropped to avoid skewing recent candles; no out-of-order replay for very old data.
-- **In-memory storage**: No persistence across restarts; suitable for demo and development. For production, a time-series store (e.g. TimescaleDB) is recommended.
-- **Context path**: Default deployment uses `server.servlet.context-path=/aggregationservice/api`, so the history endpoint is `/aggregationservice/api/history` (or `/aggregationservice/api/v1/history`). Without context path, `GET /history` and `GET /v1/history` both work.
+- **Late events**: Events older than a configurable grace period (default 5s) are dropped; no out-of-order replay for very old data.
+- **Context path**: `server.servlet.context-path=/aggregationservice/api` — history at `/aggregationservice/api/v1/history`.
 - **Range limit**: History requests are limited to a 7-day range to avoid unbounded responses.
 
 ## How to Run
 
-- **Build**: `mvn -q clean package`
-- **Run**: `mvn -q spring-boot:run` (or run `AggregationserviceApplication` from your IDE).
-- **Config**: See `src/main/resources/application.properties` for:
-  - `candle.generator.enabled`, `candle.generator.rate-ms`, `candle.symbols`, `candle.base-prices`
-  - `candle.aggregation.queue-capacity`, `candle.aggregation.grace-period-sec`
+### Run on macOS (minimal — everything in Docker)
 
-With default config, the app runs on port 8080, generates simulated bid/ask events every 200 ms for BTC-USD, ETH-USD, SOL-USD, and serves history and actuator endpoints.
+No Java or Maven on your machine. Only Docker + Docker Compose.
+
+**Colima works on all macOS versions** (Ventura, Sonoma, Monterey, etc.). Docker Desktop requires macOS 14 (Sonoma) or newer.
+
+**One-time setup:**
+
+```bash
+# 1. Xcode CLI (if needed)
+xcode-select --install
+
+# 2. Homebrew — https://brew.sh
+
+# 3. Docker + Compose + jq (Colima runs on every macOS version)
+brew install colima docker docker-compose jq
+
+# 4. Start Docker
+colima start
+```
+
+**Run the app** (builds app image, starts Postgres, starts app):
+
+```bash
+cd /path/to/aggregationservice
+./run.sh
+```
+
+Or without the script: `docker compose up --build`
+
+First run may take a few minutes (image build). App: http://localhost:8080/aggregationservice/api/actuator/health
+
+**Next times:** `colima start` (if stopped), then `./run.sh`.
+
+If you see `docker-credential-desktop: executable file not found`, install jq (`brew install jq`); the script will fix the Docker config. Or edit `~/.docker/config.json` and remove the `credsStore` line.
+
+---
+
+### Commands summary
+
+| What | Command |
+|------|--------|
+| **Run (all in Docker)** | `./run.sh` or `docker compose up --build` |
+| **Run in background** | `docker compose up -d --build` |
+| **Build (local)** | `mvn -q clean package` |
+| **Run app on host** | `./run-local-with-docker-db.sh` *(Postgres in Docker, app via Maven)* |
+| **Tests** | `mvn -q test` |
+
+- **Config**: `src/main/resources/application.properties` — generator rate, queue capacity, grace period. Symbols and base prices come from DB only (seeded via SQL). App runs on port 8080.
+
+### Optional: run app on host (Postgres in Docker)
+
+If you have Java/Maven and want to run the app locally with Postgres in Docker:
+
+```bash
+./run-local-with-docker-db.sh
+```
+
+Or: `docker compose up -d postgres` then `mvn -q spring-boot:run -DskipTests`.
+
+- Postgres runs migrations from `docker/postgres/init/` on first start.
+- App container uses **profile db** and credentials from `.env`.
+
+**Adding migrations:** Put SQL files in `docker/postgres/init/` with names like `01_schema.sql`, `02_add_foo.sql`. They run in alphabetical order on **first** container start (when the data volume is empty). For an existing DB, run new scripts manually or recreate the volume.
+
+**Manual Postgres (no Docker)**
+
+1. Create a database (e.g. `aggregation`) and run `src/main/resources/schema.sql` once (or let the app apply it on startup via `spring.sql.init.mode=always`).
+2. Set DB URL, username, and password (e.g. in `application.properties` or env).
+3. Run the app: `mvn spring-boot:run`
 
 ## Running Tests
 
 ```bash
 mvn -q test
 ```
+
+By default, **integration** tests (tag `integration`) are **excluded** so `mvn test` does not require Docker. To run the PostgreSQL-backed repository integration test (Testcontainers):
+
+```bash
+mvn test -Dtest=CandleRepositoryIntegrationTest
+```
+(Docker must be running.)
 
 If you see Mockito `MockMaker` initialization errors (e.g. in some CI or restricted environments), run the core unit tests only:
 
@@ -49,28 +118,31 @@ Tests include:
 - **HistoryControllerTest**: GET /v1/history response shape, validation (from > to, range limit, blank symbol, bad interval), health and metrics.
 - **LateEventHandlingTest**: Grace-period acceptance and late-event drop.
 - **ConcurrentAggregationTest**: Volume correctness and OHLC invariants under concurrent load, multi-symbol isolation, no deadlock under read/write mix.
+- **CandleRepositoryIntegrationTest** (tag `integration`, requires Docker): Finalize → DB write, idempotent finalize, `findFinalized` range, `flushAllActive`, `finalizedCandleCount` against real PostgreSQL (JPA).
 
 ## API Summary
 
 | Method | Path        | Query params                    | Description |
 |--------|-------------|----------------------------------|-------------|
-| GET    | /history    | symbol, interval, from, to      | Historical candles (TradingView-style `s,t,o,h,l,c,v`). Also at `/v1/history`. |
+| GET    | /v1/history | symbol, interval, from, to      | Historical candles (TradingView-style `s`, `t`, `o`, `h`, `l`, `c`, `v`). |
 
 Example:
 
 ```bash
-curl "http://localhost:8080/aggregationservice/api/history?symbol=BTC-USD&interval=1m&from=1620000000&to=1620000600"
+curl "http://localhost:8080/aggregationservice/api/v1/history?symbol=BTC-USD&interval=1m&from=1620000000&to=1620003600"
 ```
 
 ## Observability
 
-- **Health**: `GET /actuator/health`
-- **Metrics**: `GET /actuator/prometheus` (or `/actuator/metrics`) — includes `candle.*` counters and gauges (events queued/dropped/processed, queue depth, finalized count, history response time).
+- **Health**: `GET /aggregationservice/api/actuator/health`
+- **Metrics**: `GET /aggregationservice/api/actuator/prometheus` — `candle.*` counters and gauges (events queued/dropped/processed, queue depth, finalized count, history response time).
 
 ## Bonus / Extensibility
 
+- **JSON structured logging**: Logs are emitted in JSON format (Logback with Logstash encoder) for readability and easy parsing in log aggregators (e.g. ELK, Splunk).
 - **Micrometer metrics**: Per-symbol and global candle metrics for production monitoring.
-- **Per-symbol consumer threads**: Dedicated queue and consumer per symbol to avoid head-of-line blocking; queue capacity and grace period are configurable.
-- **Skipped-bucket finalization**: When events jump forward in time (e.g. after a gap), all intermediate closed buckets are finalized so history stays consistent.
-- **Late-event handling**: Configurable grace period; late events are dropped with logging and no crash.
-- **Clean separation**: Aggregation logic is independent of ingestion source; swapping in Kafka or WebSocket only requires a new event producer that calls `IngestionService.ingest(BidAskEvent)`.
+- **Per-symbol consumer threads**: Dedicated queue and consumer per symbol; queue capacity and grace period configurable.
+- **Skipped-bucket finalization**: When events jump forward in time, all intermediate closed buckets are finalized so history stays consistent.
+- **Late-event handling**: Configurable grace period; late events dropped with logging.
+- **Clean separation**: Aggregation is independent of ingestion; add Kafka/WebSocket by implementing a producer that calls `IngestionService.ingest(BidAskEvent)`.
+- **DB repository**: `JpaCandleRepository` (profile `db`) stores finalized candles in PostgreSQL; actives in memory. Idempotent save for safe retries.

@@ -17,7 +17,6 @@ public class SymbolEventQueue implements Runnable {
     private final CandleAggregationService aggregationService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
-    // Metrics
     private final Counter eventsQueued;
     private final Counter eventsDropped;
     private final Counter eventsProcessed;
@@ -32,7 +31,6 @@ public class SymbolEventQueue implements Runnable {
         this.queue              = new LinkedBlockingQueue<>(capacity);
         this.aggregationService = aggregationService;
 
-        // Tag all metrics by symbol for per-symbol observability in Prometheus/Grafana
         this.eventsQueued    = Counter.builder("candle.events.queued")
                 .tag("symbol", symbol)
                 .description("Total events accepted into the symbol queue")

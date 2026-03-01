@@ -5,11 +5,6 @@ import com.multibank.aggregationservice.models.CandleKey;
 
 import java.util.List;
 
-/**
- * Abstraction over candle storage (Repository pattern).
- * Allows swapping in-memory implementation for a time-series DB (e.g. PostgreSQL/TimescaleDB)
- * without changing aggregation or API logic.
- */
 public interface CandleRepository {
 
     void updateActiveCandle(CandleKey key, double price);

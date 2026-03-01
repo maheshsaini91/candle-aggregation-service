@@ -25,7 +25,6 @@ public class IngestionService {
     private final int queueCapacity;
     private final long gracePeriodSec;
 
-    // One queue + thread per symbol — initialized lazily on first event
     private final Map<String, SymbolEventQueue> queues = new ConcurrentHashMap<>();
     private final ExecutorService consumerPool;
 
@@ -40,10 +39,8 @@ public class IngestionService {
         this.queueCapacity      = queueCapacity;
         this.gracePeriodSec     = gracePeriodSec;
 
-        // Virtual-thread executor — one lightweight virtual thread per symbol consumer
         this.consumerPool = Executors.newCachedThreadPool();
 
-        // Gauge: total events waiting across all symbol queues
         Gauge.builder("candle.queue.total_depth", queues,
                         m -> m.values().stream().mapToInt(SymbolEventQueue::queueSize).sum())
                 .description("Total events waiting across all symbol queues")
@@ -57,8 +54,6 @@ public class IngestionService {
                     event.timestamp(),
                     Instant.now().getEpochSecond() - event.timestamp(),
                     gracePeriodSec);
-            // Late-event drops are tracked inside SymbolEventQueue via the dropped counter.
-            // Here we just return early — no queue involvement needed.
             return;
         }
 
@@ -79,7 +74,6 @@ public class IngestionService {
 
         consumerPool.submit(q);
 
-        // Per-symbol queue depth gauge
         Gauge.builder("candle.queue.depth", q, SymbolEventQueue::queueSize)
                 .tag("symbol", symbol)
                 .description("Events waiting in queue for this symbol")
@@ -106,7 +100,6 @@ public class IngestionService {
         log.info("IngestionService shutdown complete");
     }
 
-    // Visible for testing
     public List<String> activeSymbols() {
         return List.copyOf(queues.keySet());
     }
