@@ -20,41 +20,63 @@ A backend Java service that consumes a stream of bid/ask market data, aggregates
 
 ## How to Run
 
-### Run on macOS (minimal — everything in Docker)
+**Minimal requirement:** PostgreSQL running (port 5432) and Java 17+ to run the app. How you get Postgres and Java is up to you (Docker, native install, or remote DB).
 
-One flow for all Macs (Intel and Apple Silicon). No Java or Maven on host. Use a **native** Terminal on Apple Silicon (not Open using Rosetta).
+---
 
-**One-time setup:**
+### Option A — All in Docker (easiest if Docker works)
 
-```bash
-xcode-select --install
-# Install Homebrew from https://brew.sh
-
-brew install colima docker docker-compose jq
-colima start
-```
-
-**Run the app** (builds app image, starts Postgres, starts app):
+No Java or Maven on the machine. You need Docker and Docker Compose working.
 
 ```bash
 cd /path/to/aggregationservice
 ./run.sh
 ```
 
-Or without the script: `docker compose up --build`
+Or: `docker compose up --build`. App: http://localhost:8080/aggregationservice/api/actuator/health
 
-First run may take a few minutes (image build). App: http://localhost:8080/aggregationservice/api/actuator/health
+If `./run.sh` says Docker is not available, use Option B or C below. On Mac, Option A often uses Colima; see [Common issues (Docker/Colima)](#common-issues-docker--colima) if you hit credential or VM errors.
 
-**Next times:** `colima start` (if stopped), then `./run.sh`.
+---
 
-**Common issues**
+### Option B — Postgres in Docker, app on host (Java + Maven)
+
+Start Postgres with Docker, run the app with Maven. Works on any machine that can run Docker (for Postgres) and has Java 17+ and Maven.
+
+```bash
+# 1. Start Postgres (any way you can run Docker)
+docker run -d --name postgres -e POSTGRES_DB=aggregation -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15-alpine
+
+# 2. Run the app (creates schema and seed on first connect)
+mvn -q spring-boot:run -DskipTests
+```
+
+If you have Docker Compose: `docker compose up -d postgres` (runs init scripts from `docker/postgres/init/`), then `mvn -q spring-boot:run -DskipTests`. Or use `./run-local-with-docker-db.sh` if that script works on your system.
+
+---
+
+### Option C — Postgres and Java installed natively (no Docker)
+
+Install PostgreSQL and Java 17+ (and Maven) however you normally do on your OS. Then:
+
+1. Create database `aggregation`, user `postgres` / password `postgres` (or match `application.properties`).
+2. Run `src/main/resources/schema.sql` and `src/main/resources/data.sql` once.
+3. Run: `mvn -q spring-boot:run -DskipTests`
+
+---
+
+### Common issues (Docker / Colima)
+
+Only relevant if you use Option A (all in Docker) with Colima on Mac.
 
 | Issue | Fix |
 |-------|-----|
-| `docker-credential-desktop` not found | `brew install jq` or remove `credsStore` from `~/.docker/config.json`. |
+| `docker-credential-desktop` not found | Remove `credsStore` from `~/.docker/config.json`, or `brew install jq` (script may auto-fix). |
 | Cannot connect to Docker daemon | `colima stop && colima start`. |
-| `limactl is running under rosetta` (Apple Silicon) | Use native Terminal; then `brew uninstall colima lima && brew install colima && colima start`. |
-| docker-compose not found | `brew install docker-compose`. |
+| `limactl is running under rosetta` | Use native Terminal; `brew uninstall colima lima && brew install colima && colima start`. |
+| `qemu-img not found` | `brew install qemu` then `colima start`. |
+| docker-compose not found | Install Docker Compose for your OS, or use Option B (Postgres in Docker + Maven). |
+| Homebrew errors | Use Option B or C (Postgres + Java/Maven) so you don’t depend on Homebrew. |
 
 ---
 
