@@ -2,6 +2,7 @@ package com.multibank.aggregationservice;
 
 import com.multibank.aggregationservice.models.BidAskEvent;
 import com.multibank.aggregationservice.repositories.CandleRepository;
+import com.multibank.aggregationservice.repositories.InMemoryCandleRepository;
 import com.multibank.aggregationservice.services.CandleAggregationService;
 import com.multibank.aggregationservice.services.CandleWindowManager;
 import com.multibank.aggregationservice.services.IngestionService;
@@ -33,7 +34,7 @@ class LateEventHandlingTest {
     @BeforeEach
     void setUp() {
         SimpleMeterRegistry metrics = new SimpleMeterRegistry();
-        CandleRepository repo = new CandleRepository(metrics);
+        CandleRepository repo = new InMemoryCandleRepository(metrics);
         CandleWindowManager windowManager = new CandleWindowManager(repo);
         CandleAggregationService aggregationService =
                 new CandleAggregationService(repo, windowManager, metrics);

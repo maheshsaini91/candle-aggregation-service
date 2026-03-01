@@ -58,12 +58,6 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
-		<!-- Micrometer Prometheus — registers a concrete MeterRegistry bean -->
-		<dependency>
-			<groupId>io.micrometer</groupId>
-			<artifactId>micrometer-registry-prometheus</artifactId>
-		</dependency>
-
 		<!-- Logback JSON layout for structured logging -->
 		<dependency>
 			<groupId>ch.qos.logback.contrib</groupId>

@@ -3,6 +3,7 @@ package com.multibank.aggregationservice;
 import com.multibank.aggregationservice.models.Candle;
 import com.multibank.aggregationservice.models.CandleKey;
 import com.multibank.aggregationservice.repositories.CandleRepository;
+import com.multibank.aggregationservice.repositories.InMemoryCandleRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +22,7 @@ class CandleRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        repository = new CandleRepository(new SimpleMeterRegistry());
+        repository = new InMemoryCandleRepository(new SimpleMeterRegistry());
     }
 
     @Test

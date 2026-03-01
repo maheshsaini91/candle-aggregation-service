@@ -26,15 +26,20 @@ public class CandleWindowManager {
 
     public void checkAndFinalizeIfWindowClosed(String symbol, Interval interval, long newBucket) {
         String trackingKey = symbol + "::" + interval.getSeconds();
+        long intervalSec = interval.getSeconds();
 
-        Long previousBucket = lastBucketPerKey.put(trackingKey, newBucket);
+        Long previousBucket = lastBucketPerKey.get(trackingKey);
 
-        if (previousBucket != null && previousBucket != newBucket) {
-            // Window has rolled over — finalize the previous bucket
-            CandleKey oldKey = new CandleKey(symbol, interval.getSeconds(), previousBucket);
-            log.debug("Window closed: symbol={} interval={}s bucket={}",
-                    symbol, interval.getSeconds(), previousBucket);
-            repository.finalizeCandle(oldKey);
+        if (previousBucket != null && newBucket > previousBucket) {
+            // One or more windows closed — finalize every closed bucket (handles event gaps)
+            for (long b = previousBucket; b < newBucket; b += intervalSec) {
+                CandleKey oldKey = new CandleKey(symbol, intervalSec, b);
+                log.debug("Window closed: symbol={} interval={}s bucket={}",
+                        symbol, intervalSec, b);
+                repository.finalizeCandle(oldKey);
+            }
         }
+        // Only advance lastBucket; never downgrade on late events (out-of-order delivery)
+        lastBucketPerKey.merge(trackingKey, newBucket, (a, b) -> Math.max(a, b));
     }
 }

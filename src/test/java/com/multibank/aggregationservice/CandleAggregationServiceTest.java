@@ -4,6 +4,7 @@ import com.multibank.aggregationservice.dtos.HistoryResponse;
 import com.multibank.aggregationservice.enums.Interval;
 import com.multibank.aggregationservice.models.BidAskEvent;
 import com.multibank.aggregationservice.repositories.CandleRepository;
+import com.multibank.aggregationservice.repositories.InMemoryCandleRepository;
 import com.multibank.aggregationservice.services.CandleAggregationService;
 import com.multibank.aggregationservice.services.CandleWindowManager;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -26,7 +27,7 @@ class CandleAggregationServiceTest {
     @BeforeEach
     void setUp() {
         SimpleMeterRegistry metrics = new SimpleMeterRegistry();
-        repository    = new CandleRepository(metrics);
+        repository    = new InMemoryCandleRepository(metrics);
         windowManager = new CandleWindowManager(repository);
         service       = new CandleAggregationService(repository, windowManager, metrics);
     }

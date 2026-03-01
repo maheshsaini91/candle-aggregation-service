@@ -3,6 +3,7 @@ package com.multibank.aggregationservice;
 import com.multibank.aggregationservice.enums.Interval;
 import com.multibank.aggregationservice.models.CandleKey;
 import com.multibank.aggregationservice.repositories.CandleRepository;
+import com.multibank.aggregationservice.repositories.InMemoryCandleRepository;
 import com.multibank.aggregationservice.services.CandleWindowManager;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +19,7 @@ class CandleWindowManagerTest {
 
     @BeforeEach
     void setUp() {
-        repository    = new CandleRepository(new SimpleMeterRegistry());
+        repository    = new InMemoryCandleRepository(new SimpleMeterRegistry());
         windowManager = new CandleWindowManager(repository);
     }
 
@@ -86,5 +87,20 @@ class CandleWindowManagerTest {
         windowManager.checkAndFinalizeIfWindowClosed(symbol, Interval.ONE_MIN, 1620000000L);
         windowManager.checkAndFinalizeIfWindowClosed(symbol, Interval.ONE_MIN, 1620000000L);
         assertThat(repository.finalizedCandleCount()).isEqualTo(0);
+    }
+
+    @Test @DisplayName("Skipped buckets are all finalized when events jump forward")
+    void skippedBucketsFinalized() {
+        String symbol = "BTC-USD";
+        long intervalSec = 60L;
+        repository.updateActiveCandle(new CandleKey(symbol, intervalSec, 1620000000L), 29505.0);
+        repository.updateActiveCandle(new CandleKey(symbol, intervalSec, 1620000060L), 29510.0);
+        windowManager.checkAndFinalizeIfWindowClosed(symbol, Interval.ONE_MIN, 1620000000L);
+        windowManager.checkAndFinalizeIfWindowClosed(symbol, Interval.ONE_MIN, 1620000120L);
+        assertThat(repository.finalizedCandleCount()).isEqualTo(2);
+        assertThat(repository.findFinalized(symbol, intervalSec, 1620000000L, 1620000120L))
+                .hasSize(2)
+                .extracting(c -> c.time())
+                .containsExactly(1620000000L, 1620000060L);
     }
 }

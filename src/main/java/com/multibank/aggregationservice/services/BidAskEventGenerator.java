@@ -25,8 +25,6 @@ public class BidAskEventGenerator {
     private final List<String> symbols;
     private final Random random = new Random();
     private final Map<String, Double> basePrices;
-    @Value("${candle.symbols}")
-    String symbolsConfig;
 
     // Track last price per symbol for random walk continuity
     private final ConcurrentHashMap<String, Double> lastPrices = new ConcurrentHashMap<>();
@@ -34,7 +32,7 @@ public class BidAskEventGenerator {
     public BidAskEventGenerator(
             IngestionService ingestionService,
             @Value("${candle.symbols:BTC-USD,ETH-USD,SOL-USD}") String symbolsConfig,
-            @Value("${candle.base-prices}") String basePricesConfig
+            @Value("${candle.base-prices:BTC-USD:65000,ETH-USD:3500,SOL-USD:150}") String basePricesConfig
     ) {
         this.ingestionService = ingestionService;
         this.symbols = Arrays.stream(symbolsConfig.split(","))

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/v1")
 public class HistoryController {
     private static final Logger log = LoggerFactory.getLogger(HistoryController.class);
     private static final long MAX_RANGE_SECONDS = 7 * 24 * 3600L;
@@ -22,7 +21,7 @@ public class HistoryController {
         this.aggregationService = aggregationService;
     }
 
-    @GetMapping("/history")
+    @GetMapping(value = { "/history", "/v1/history" })
     public ResponseEntity<HistoryResponse> getHistory(
             @RequestParam String symbol,
             @RequestParam String interval,
