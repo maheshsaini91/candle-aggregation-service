@@ -22,22 +22,15 @@ A backend Java service that consumes a stream of bid/ask market data, aggregates
 
 ### Run on macOS (minimal — everything in Docker)
 
-No Java or Maven on your machine. Only Docker + Docker Compose.
-
-**Colima works on all macOS versions** (Ventura, Sonoma, Monterey, etc.). Docker Desktop requires macOS 14 (Sonoma) or newer.
+One flow for all Macs (Intel and Apple Silicon). No Java or Maven on host. Use a **native** Terminal on Apple Silicon (not Open using Rosetta).
 
 **One-time setup:**
 
 ```bash
-# 1. Xcode CLI (if needed)
 xcode-select --install
+# Install Homebrew from https://brew.sh
 
-# 2. Homebrew — https://brew.sh
-
-# 3. Docker + Compose + jq (Colima runs on every macOS version)
 brew install colima docker docker-compose jq
-
-# 4. Start Docker
 colima start
 ```
 
@@ -54,7 +47,14 @@ First run may take a few minutes (image build). App: http://localhost:8080/aggre
 
 **Next times:** `colima start` (if stopped), then `./run.sh`.
 
-If you see `docker-credential-desktop: executable file not found`, install jq (`brew install jq`); the script will fix the Docker config. Or edit `~/.docker/config.json` and remove the `credsStore` line.
+**Common issues**
+
+| Issue | Fix |
+|-------|-----|
+| `docker-credential-desktop` not found | `brew install jq` or remove `credsStore` from `~/.docker/config.json`. |
+| Cannot connect to Docker daemon | `colima stop && colima start`. |
+| `limactl is running under rosetta` (Apple Silicon) | Use native Terminal; then `brew uninstall colima lima && brew install colima && colima start`. |
+| docker-compose not found | `brew install docker-compose`. |
 
 ---
 
